@@ -1,8 +1,7 @@
+numpy==1.26.4
 streamlit
-opencv-python-headless==4.8.0.74
+opencv-python-headless
 mediapipe
 scikit-learn
-numpy
-pandas
 joblib
 Pillow
