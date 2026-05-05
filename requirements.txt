@@ -1,13 +1,7 @@
 streamlit
-
 opencv-python-headless
-
 mediapipe
-
 scikit-learn
-
 numpy==1.26.4
-
 joblib
-
 Pillow
