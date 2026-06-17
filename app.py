@@ -10,6 +10,24 @@ st.set_page_config(page_title="AI Scanner Huruf", page_icon="📝", layout="cent
 st.title("📝 AI Scanner Huruf Tulisan Tangan")
 st.write("Gunakan spidol hitam di kertas putih, lalu upload foto satu huruf di sini.")
 
+# --- PENJELASAN HYPERPARAMETER ---
+with st.expander("ℹ️ Info: Bagaimana AI Mengenali Huruf?"):
+    st.write("""
+    Model ini menggunakan algoritma **Support Vector Machine (SVM)** untuk mengenali pola tulisan tangan.
+    Berikut adalah pengaturan *hyperparameter* yang digunakan agar AI bekerja optimal:
+    """)
+    
+    st.table({
+        "Hyperparameter": ["Kernel", "C", "Gamma"],
+        "Nilai": ["RBF", "1.0", "Scale"],
+        "Fungsi/Alasan": [
+            "Memetakan piksel ke dimensi lebih tinggi agar pola huruf yang kompleks dapat dibedakan.",
+            "Menjaga keseimbangan agar model tidak terlalu 'kaku' (overfitting) pada data latihan.",
+            "Mengatur jangkauan pengaruh setiap titik piksel terhadap keputusan akhir klasifikasi."
+        ]
+    })
+    st.caption("Konfigurasi ini memastikan AI tetap presisi meski bentuk tulisan tangan tiap orang berbeda.")
+
 # --- 1. LOAD MODEL ---
 @st.cache_resource # Biar nggak loading model terus setiap klik tombol
 def load_model():
@@ -43,62 +61,49 @@ if uploaded_file is not None:
             img_gray = cv2.cvtColor(img_cv, cv2.COLOR_RGB2GRAY)
             
             # --- TAHAP 2: INVERT & THRESHOLD (BERSIHKAN KERTAS) ---
-            # Jika kertas putih (cerah), kita balik jadi hitam
             if np.mean(img_gray) > 127:
                 img_gray = cv2.bitwise_not(img_gray)
             
-            # Buat gambar jadi Hitam-Putih murni (buang bayangan/abu-abu)
             _, img_thresh = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             
-            # --- TAHAP 3: AUTO-CROP & SQUARE PADDING (ANTI GEPENG) ---
+            # --- TAHAP 3: AUTO-CROP & SQUARE PADDING ---
             contours, _ = cv2.findContours(img_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             if contours:
-                # Ambil area tulisan terbesar
                 c = max(contours, key=cv2.contourArea)
                 x, y, w, h = cv2.boundingRect(c)
                 img_cropped = img_thresh[y:y+h, x:x+w]
                 
-                # Biar nggak gepeng: Buat kanvas kotak sesuai sisi terpanjang
                 max_side = max(w, h)
                 img_square = np.zeros((max_side, max_side), dtype=np.uint8)
                 
-                # Taruh huruf di tengah kanvas kotak
                 ax, ay = (max_side - w) // 2, (max_side - h) // 2
                 img_square[ay:ay+h, ax:ax+w] = img_cropped
                 
-                # Kasih margin (padding) agar tidak nempel ke pinggir
                 pad = int(max_side * 0.2)
                 img_final_prep = cv2.copyMakeBorder(img_square, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
             else:
                 img_final_prep = img_thresh
 
-            # --- TAHAP 4: RESIZE & TEBALKAN (MATCH DATASET KAGGLE) ---
-            # Resize ke 28x28
+            # --- TAHAP 4: RESIZE & TEBALKAN ---
             img_resized = cv2.resize(img_final_prep, (28, 28), interpolation=cv2.INTER_AREA)
-            
-            # Tebalkan sedikit garisnya agar AI lebih mudah baca
             kernel = np.ones((2,2), np.uint8)
             img_to_predict = cv2.dilate(img_resized, kernel, iterations=1)
             
-            # Tampilkan wujud yang sebenarnya dilihat AI
             st.image(img_to_predict, caption="Wujud yang dilihat AI (28x28)", width=150)
             
             # --- TAHAP 5: PREDIKSI ---
-            # Flatten: Jadi 1 baris berisi 784 angka
             pixel_data = img_to_predict.flatten().reshape(1, -1)
             
-            # Tebak!
             pred_index = model.predict(pixel_data)[0]
             pred_letter = kamus_huruf[pred_index]
             
-            # Ambil probabilitas (seberapa yakin AI-nya)
             prob = model.predict_proba(pixel_data)[0]
             confidence = np.max(prob) * 100
             
             # --- HASIL AKHIR ---
             st.divider()
-            if confidence > 10: # Threshold keyakinan
+            if confidence > 10:
                 st.balloons()
                 st.success(f"### 🎉 Hasil Prediksi: **{pred_letter}**")
                 st.info(f"Tingkat Keyakinan AI: {confidence:.2f}%")
